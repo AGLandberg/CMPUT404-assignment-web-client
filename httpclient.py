@@ -38,6 +38,9 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
+
+    BLANK_LINE = '\r\n\r\n'
+
     def get_host_port(self,url):
         #parse the url in order to get the correct host and port values 
         urlTuple = urllib.parse.urlparse(url)
@@ -74,14 +77,11 @@ class HTTPClient(object):
 
     #get host information
     def get_remote_ip(self, host):
-        print(f'Getting IP for {host}')
         try:
             remote_ip = socket.gethostbyname( host )
         except socket.gaierror:
             print ('Hostname could not be resolved. Exiting')
             sys.exit()
-
-        print (f'Ip address of {host} is {remote_ip}')
         return remote_ip
 
     # read everything from the socket
@@ -96,57 +96,53 @@ class HTTPClient(object):
                 done = not part
         return buffer.decode('utf-8')
 
-    def build_path(self, url):
-        urlTuple =urllib.parse.urlparse(url)
+    def build_path(self, url, url_query_args=None):
+        urlTuple = urllib.parse.urlparse(url)
         path = urlTuple.path
         if urlTuple.params:
             path += ';' + urlTuple.params
         if urlTuple.query:
             path += '?' + urlTuple.query
+        if url_query_args:
+            encoded_args = self.format_args(url_query_args)
+            path += ('&' + encoded_args) if urlTuple.query else encoded_args
         if urlTuple.fragment:
             path += '#' + urlTuple.fragment
-        return path
+        return path if path else "/"
 
     def GET(self, url, args=None):
         host, port = self.get_host_port(url)
-        path = self.build_path(url)
-        if not path:
-            path = "/"
+        #any args passed in will be built into the url as query parameters, as GET requests shouldn't have a body
+        #source: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET
+        path = self.build_path(url, args)
         data = f'GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nAccept: */*\r\n\r\n'
-        print("*****REQUEST:", data)
-        self.connect(self.get_remote_ip(host), port)
-        self.sendall(data)
-        response = self.recvall(self.socket)
-        self.socket.close()
-        code = self.get_code(response)
-        body = self.get_body(response)
+        code, body = self.process_request(data, host, port)
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         host, port = self.get_host_port(url)
         path = self.build_path(url)
-        if not path:
-            path = "/"
-
+        #args built into POST request body
         body = ''
         content_length = 0
         if args:
-            body = urllib.parse.urlencode(args)
+            body = self.format_args(args)
             content_length = len(body.encode('utf-8'))
-
         data = f'POST {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {content_length}\r\nConnection: close\r\nAccept: */*\r\n\r\n{body}'
-        print("*****REQUEST:", data)
+        code, body = self.process_request(data, host, port)
+        return HTTPResponse(code, body)
+    
+    def process_request(self, data, host, port):
         self.connect(self.get_remote_ip(host), port)
         self.sendall(data)
         response = self.recvall(self.socket)
-        print("***RESPONSE ", response) 
         self.socket.close()
         code = self.get_code(response)
         body = self.get_body(response)
-        return HTTPResponse(code, body)
-    
-    def format_args(args):
-        return ''
+        return (code, body)
+
+    def format_args(self, args):
+        return urllib.parse.urlencode(args)
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
