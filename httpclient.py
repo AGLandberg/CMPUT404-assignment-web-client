@@ -105,7 +105,7 @@ class HTTPClient(object):
             path += '?' + urlTuple.query
         if url_query_args:
             encoded_args = self.format_args(url_query_args)
-            path += ('&' + encoded_args) if urlTuple.query else encoded_args
+            path += ('&' + encoded_args) if urlTuple.query else ("?" + encoded_args)
         if urlTuple.fragment:
             path += '#' + urlTuple.fragment
         return path if path else "/"
