@@ -136,6 +136,7 @@ class HTTPClient(object):
         self.connect(self.get_remote_ip(host), port)
         self.sendall(data)
         response = self.recvall(self.socket)
+        print("SERVER RESPONSE:\n", response)
         self.socket.close()
         code = self.get_code(response)
         body = self.get_body(response)
